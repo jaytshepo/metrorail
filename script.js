@@ -4,7 +4,7 @@ import {
   getFirestore, doc, getDoc, onSnapshot
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
-// Paste your Firebase config from the console here:
+
 const firebaseConfig = {
     apiKey: "AIzaSyB2gjql42QQAn6kEnuAlb-U8uO4veOf9kQ",
     authDomain: "metro-rail-2de9c.firebaseapp.com",
@@ -14,14 +14,14 @@ const firebaseConfig = {
     appId: "1:1036516254492:web:a1d07b16233af9cecc90d9"
 };
 
-// Initialize Firebase + Firestore
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Firestore doc reference
+
 const scheduleDocRef = doc(db, 'schedules', 'pretoria-saulsville');
 
-/* -------------------- Render schedule from Firestore -------------------- */
+
 function renderSchedule(data) {
   const table = document.getElementById('schedule-table');
   if (!table) return;
@@ -29,13 +29,13 @@ function renderSchedule(data) {
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
 
-  // Build header row
+  
   const headerCells = ['<th>Train No.</th>'].concat(
     (data.trainNumbers || []).map(n => `<th>${n}</th>`)
   ).join('');
   thead.innerHTML = `<tr>${headerCells}</tr>`;
 
-  // Build body rows
+  
   tbody.innerHTML = (data.rows || []).map(row => {
     const times = row.times || [];
     const cells = ['<td>' + escapeHtml(row.station || '') + '</td>']
@@ -53,7 +53,7 @@ function escapeHtml(str) {
     .replaceAll("'", '&#039;');
 }
 
-/* -------------------- Load and listen for changes -------------------- */
+
 async function loadScheduleFromFirestore() {
   try {
     const snap = await getDoc(scheduleDocRef);
@@ -93,13 +93,13 @@ function showPage(pageId) {
   }
 }
 
-// Set page on hash change
+
 window.addEventListener('hashchange', () => {
   const hash = location.hash.replace('#', '') || 'home';
   showPage(hash);
 });
 
-// Set initial page
+
 window.addEventListener('load', () => {
   const hash = location.hash.replace('#', '') || 'home';
   showPage(hash);
@@ -402,6 +402,7 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
 
 
 
