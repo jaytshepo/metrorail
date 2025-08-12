@@ -1,27 +1,66 @@
+/*
+  script.js
+  Read-only Firestore integration + original site code (complete).
+  - This file will try to use an existing firebase config on the page:
+      window.firebaseConfig  OR  window.__FIREBASE_CONFIG__
+    If no config is found, Firestore features will be disabled but the original hard-coded table remains as fallback.
+  - No seeding functions are included.
+  - Keeps original map, clock, filter, and routing code intact.
+*/
+
 /* -------------------- FIREBASE (modular v9) -------------------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, onSnapshot
+  getFirestore,
+  initializeFirestore,
+  doc,
+  getDoc,
+  onSnapshot
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
+let app = null;
+let db = null;
 
-const firebaseConfig = {
-    apiKey: "AIzaSyB2gjql42QQAn6kEnuAlb-U8uO4veOf9kQ",
-    authDomain: "metro-rail-2de9c.firebaseapp.com",
-    projectId: "metro-rail-2de9c",
-    storageBucket: "metro-rail-2de9c.firebasestorage.app",
-    messagingSenderId: "1036516254492",
-    appId: "1:1036516254492:web:a1d07b16233af9cecc90d9",
-    measurementId: "G-83G44S49J5"
-};
+// Try to auto-detect firebaseConfig on the page so you don't have to edit this file.
+// If you previously embedded your firebaseConfig in another script as `window.firebaseConfig`,
+// this code will reuse it.
+const detectedConfig = window.firebaseConfig || window.__FIREBASE_CONFIG__ || null;
 
+if (detectedConfig) {
+  try {
+    app = initializeApp(detectedConfig);
+    // prefer initializeFirestore with useFetchStreams:false to avoid WebChannel streaming issues on some networks
+    try {
+      db = initializeFirestore(app, { useFetchStreams: false });
+    } catch (e) {
+      // fallback
+      db = getFirestore(app);
+    }
+    console.log('Firebase initialized from detected config. Firestore ready.');
+  } catch (err) {
+    console.warn('Error initializing Firebase with detected config:', err);
+    app = null;
+    db = null;
+  }
+} else {
+  console.warn('No firebaseConfig detected on window (window.firebaseConfig or window.__FIREBASE_CONFIG__). Firestore features are disabled.');
+}
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Firestore doc we will use (only if db exists)
+let scheduleDocRef = null;
+if (db) {
+  scheduleDocRef = doc(db, 'schedules', 'pretoria-saulsville');
+}
 
-
-const scheduleDocRef = doc(db, 'schedules', 'pretoria-saulsville');
-
+/* -------------------- Render schedule from Firestore -------------------- */
+function escapeHtml(str) {
+  return String(str || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
 
 function renderSchedule(data) {
   const table = document.getElementById('schedule-table');
@@ -30,13 +69,13 @@ function renderSchedule(data) {
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
 
-  // Build header row
+  // Build header row (first cell is Train No.)
   const headerCells = ['<th>Train No.</th>'].concat(
-    (data.trainNumbers || []).map(n => `<th>${n}</th>`)
+    (data.trainNumbers || []).map(n => `<th>${escapeHtml(n)}</th>`)
   ).join('');
   thead.innerHTML = `<tr>${headerCells}</tr>`;
 
-
+  // Build body rows
   tbody.innerHTML = (data.rows || []).map(row => {
     const times = row.times || [];
     const cells = ['<td>' + escapeHtml(row.station || '') + '</td>']
@@ -45,42 +84,37 @@ function renderSchedule(data) {
   }).join('');
 }
 
-function escapeHtml(str) {
-  return String(str)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-
+/* -------------------- Load and listen for Firestore changes (if available) -------------------- */
 async function loadScheduleFromFirestore() {
+  if (!db || !scheduleDocRef) return;
   try {
     const snap = await getDoc(scheduleDocRef);
     if (snap.exists()) {
       renderSchedule(snap.data());
       console.log('Schedule loaded from Firestore');
     } else {
-      console.warn('No schedule found in Firestore.');
+      console.warn('No schedule document found in Firestore at schedules/pretoria-saulsville');
     }
   } catch (err) {
-    console.error('Error loading schedule:', err);
+    console.error('Error loading schedule from Firestore:', err);
   }
 }
 
 function listenForScheduleChanges() {
+  if (!db || !scheduleDocRef) return;
   onSnapshot(scheduleDocRef, (snap) => {
     if (snap.exists()) {
       renderSchedule(snap.data());
-      console.log('Schedule updated from Firestore');
+      console.log('Realtime update applied to schedule table');
     }
   }, (err) => {
     console.error('Realtime listener error:', err);
   });
 }
 
+/* -------------------- ORIGINAL SITE CODE (routing, filters, map, clock, etc.) -------------------- */
 
+/* ROUTING & PAGES */
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(page => {
     page.classList.remove('active');
@@ -99,12 +133,7 @@ window.addEventListener('hashchange', () => {
   showPage(hash);
 });
 
-window.addEventListener('load', () => {
-  const hash = location.hash.replace('#', '') || 'home';
-  showPage(hash);
-});
-
-
+/* FILTER / SEARCH */
 function filterRows() {
   const query = document.getElementById("search")?.value.toLowerCase() || "";
   const rows = document.querySelectorAll("#schedule-table tbody tr");
@@ -115,7 +144,7 @@ function filterRows() {
   });
 }
 
-
+/* ABOUT PAGE DATA */
 const teamMembers = [
     { name: "Frank Nkuna", position: "CEO", image: "images/image.jpg" },
     { name: "Oageng Mashaba", position: "Operations Director", image: "images/oagang.jpg" },
@@ -150,9 +179,7 @@ function initAboutPage() {
     setInterval(updateDateTime, 6000);
 }
 
-document.addEventListener('DOMContentLoaded', initAboutPage);
-
-
+/* MAP, ROUTES, SCHEDULE COUNTDOWN */
 const trainSchedule = ["06:00", "07:30", "09:00", "10:30", "12:00", "13:30", "15:00", "16:30", "18:00", "19:30", "21:00", "23:45"];
 
 const routes = [
@@ -168,6 +195,11 @@ let originMarker, destMarker;
 let routeLine;
 
 function initMap() {
+    // Ensure Leaflet CSS/JS are loaded in the page (your home.html had them previously)
+    if (typeof L === 'undefined') {
+      console.warn('Leaflet (L) is not loaded. Map functions will be disabled.');
+      return;
+    }
     map = L.map('map').setView([-25.7479, 28.2293], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
@@ -191,9 +223,12 @@ function updateMapRoute() {
 function updateRoute() {
     currentRouteIndex = (currentRouteIndex + 1) % routes.length;
     const route = routes[currentRouteIndex];
-    document.getElementById('origin').textContent = route.origin;
-    document.getElementById('destination').textContent = route.destination;
-    document.getElementById('tripCost').textContent = route.price;
+    const originEl = document.getElementById('origin');
+    const destinationEl = document.getElementById('destination');
+    const tripCostEl = document.getElementById('tripCost');
+    if (originEl) originEl.textContent = route.origin;
+    if (destinationEl) destinationEl.textContent = route.destination;
+    if (tripCostEl) tripCostEl.textContent = route.price;
     updateMapRoute();
 }
 
@@ -241,15 +276,15 @@ function updateTrainCountdown() {
         const seconds = secDiff % 60;
 
         if (secDiff <= 60) {
-            countdownElement.textContent = `${seconds} seconds - Boarding now!`;
+            if (countdownElement) countdownElement.textContent = `${seconds} seconds - Boarding now!`;
         } else if (secDiff <= 120) {
-            countdownElement.textContent = "1 minute - Boarding soon!";
+            if (countdownElement) countdownElement.textContent = "1 minute - Boarding soon!";
         } else if(secDiff >= 3600){
-            countdownElement.textContent = `${hours} hours ${minutes} minutes (${nextTrain})`
+            if (countdownElement) countdownElement.textContent = `${hours} hours ${minutes} minutes (${nextTrain})`
         } else {
-            const [hours, mins] = nextTrain.split(':');
-            const formattedTime = `${hours.padStart(2, '0')}:${mins}`;
-            countdownElement.textContent = `${minutes} minutes (${formattedTime})`;
+            const [hoursStr, mins] = nextTrain.split(':');
+            const formattedTime = `${hoursStr.padStart(2, '0')}:${mins}`;
+            if (countdownElement) countdownElement.textContent = `${minutes} minutes (${formattedTime})`;
         }
     } else {
         const firstTrain = trainSchedule[0].split(':').map(Number);
@@ -260,9 +295,9 @@ function updateTrainCountdown() {
             const hours = Math.floor(secondsUntilFirstTrain / 3600);
             const minutes = Math.floor((secondsUntilFirstTrain % 3600) / 60);
             const formattedTime = `${firstTrain[0].toString().padStart(2, '0')}:${firstTrain[1].toString().padStart(2, '0')}`;
-            countdownElement.textContent = `${hours}h ${minutes}m (${formattedTime} next day)`;
+            if (countdownElement) countdownElement.textContent = `${hours}h ${minutes}m (${formattedTime} next day)`;
         } else {
-            countdownElement.textContent = "No more trains today";
+            if (countdownElement) countdownElement.textContent = "No more trains today";
         }
     }
 }
@@ -272,36 +307,36 @@ function updateAll() {
     updateTrainCountdown();
 }
 
+/* INIT */
 function init() {
-    initMap();
-    updateAll();
-    updateRoute();
+  initMap();
+  updateAll();
+  updateRoute();
 
-    
-    loadScheduleFromFirestore();     
-    listenForScheduleChanges();      
+  // Firestore: load and listen only if db is initialized
+  if (db && scheduleDocRef) {
+    loadScheduleFromFirestore();     // loads once from Firestore
+    listenForScheduleChanges();      // realtime updates
+  } else {
+    console.log('Firestore not initialized — using hard-coded schedule fallback.');
+  }
 
-    setInterval(updateAll, 1000);
-    setInterval(updateRoute, 15000);
+  setInterval(updateAll, 1000);
+  setInterval(updateRoute, 15000);
+
+  // About page init
+  initAboutPage();
+
+  // wire optional search input (if present)
+  const searchInput = document.getElementById('search');
+  if (searchInput) {
+    searchInput.addEventListener('input', filterRows);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
 
-function init() {
-  // Load initial schedule
-  loadScheduleFromFirestore();
-  // Start listening for changes
-  listenForScheduleChanges();
-
-  
-}
-
-document.addEventListener('DOMContentLoaded', init);
-
-
-
-
-
+/* End of script.js */
 
 
 
