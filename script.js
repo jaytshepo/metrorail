@@ -1,14 +1,10 @@
-/* script.js - replaced with Firestore integration
-   Make sure home.html now loads this file as: <script type="module" src="script.js"></script>
-*/
-
 /* -------------------- FIREBASE (modular v9) -------------------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, setDoc, onSnapshot
+  getFirestore, doc, getDoc, onSnapshot
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
-// 1) Paste your firebaseConfig here (from Firebase console)
+
 const firebaseConfig = {
     apiKey: "AIzaSyB2gjql42QQAn6kEnuAlb-U8uO4veOf9kQ",
     authDomain: "metro-rail-2de9c.firebaseapp.com",
@@ -19,42 +15,36 @@ const firebaseConfig = {
     measurementId: "G-83G44S49J5"
 };
 
-// 2) Initialize Firebase + Firestore
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Firestore doc we will use:
+
 const scheduleDocRef = doc(db, 'schedules', 'pretoria-saulsville');
 
-/* -------------------- Helper: render schedule into table -------------------- */
-function renderSchedule(data) {
-  // data expected shape:
-  // { trainNumbers: ["0003","0005",...],
-  //   rows: [ { station: "PRETORIA", times: ["05:15","05:29",...] }, ... ] }
 
+function renderSchedule(data) {
   const table = document.getElementById('schedule-table');
   if (!table) return;
 
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
 
-  // Build header: first cell "Train No." then train numbers
+  // Build header row
   const headerCells = ['<th>Train No.</th>'].concat(
     (data.trainNumbers || []).map(n => `<th>${n}</th>`)
   ).join('');
   thead.innerHTML = `<tr>${headerCells}</tr>`;
 
-  // Build body rows
+
   tbody.innerHTML = (data.rows || []).map(row => {
-    // make sure times length matches trainNumbers length (pad with empty)
-    const times = (row.times || []);
+    const times = row.times || [];
     const cells = ['<td>' + escapeHtml(row.station || '') + '</td>']
       .concat(times.map(t => `<td>${escapeHtml(t || '')}</td>`));
     return `<tr>${cells.join('')}</tr>`;
   }).join('');
 }
 
-// small helper to avoid HTML injection if any (good practice)
 function escapeHtml(str) {
   return String(str)
     .replaceAll('&', '&amp;')
@@ -64,7 +54,7 @@ function escapeHtml(str) {
     .replaceAll("'", '&#039;');
 }
 
-/* -------------------- Load schedule once -------------------- */
+
 async function loadScheduleFromFirestore() {
   try {
     const snap = await getDoc(scheduleDocRef);
@@ -72,81 +62,25 @@ async function loadScheduleFromFirestore() {
       renderSchedule(snap.data());
       console.log('Schedule loaded from Firestore');
     } else {
-      console.log('No schedule doc found in Firestore at schedules/pretoria-saulsville');
+      console.warn('No schedule found in Firestore.');
     }
   } catch (err) {
     console.error('Error loading schedule:', err);
   }
 }
 
-/* -------------------- Realtime listener -------------------- */
 function listenForScheduleChanges() {
   onSnapshot(scheduleDocRef, (snap) => {
     if (snap.exists()) {
       renderSchedule(snap.data());
-      console.log('Realtime update applied to table');
-    } else {
-      console.log('Schedule doc removed or does not exist.');
+      console.log('Schedule updated from Firestore');
     }
   }, (err) => {
     console.error('Realtime listener error:', err);
   });
 }
 
-/* -------------------- Seed helper (one-time) --------------------
-   Reads the current table in the DOM and writes it to Firestore
-   Useful to migrate your existing HTML table into Firestore.
-   Usage (after page loads): call window.seedSchedule() from devtools console.
-*/
-function readTableDomToObject() {
-  const table = document.getElementById('schedule-table');
-  if (!table) return null;
 
-  const ths = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
-  // first header is "Train No." - remove it
-  const trainNumbers = ths.slice(1);
-
-  const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
-    const cells = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim());
-    return {
-      station: cells[0] || '',
-      times: cells.slice(1) // array of times in same order as trainNumbers
-    };
-  });
-
-  return { trainNumbers, rows };
-}
-
-async function seedScheduleToFirestore() {
-  const data = readTableDomToObject();
-  if (!data) {
-    alert('Could not read table DOM.');
-    return;
-  }
-  try {
-    await setDoc(scheduleDocRef, data);
-    alert('Seeded schedule into Firestore successfully!');
-  } catch (err) {
-    console.error('Error seeding schedule:', err);
-    alert('Error seeding schedule: see console');
-  }
-}
-// expose seed function to console so you can run one-time
-window.seedSchedule = seedScheduleToFirestore;
-
-/* -------------------- ------- (your original app code) ------- -------------------- */
-
-/* Keep the rest of your existing script functionality:
-   - page routing (showPage)
-   - filterRows (search)
-   - about page code
-   - map & route updates
-   - clock & countdown
-   These were present in your original file; include them below so the app behaves the same.
-   (I paste them unchanged, but you already had them in your file — keep them.)
-*/
-
-// --- ROUTING (keep existing showPage/hash code) ---
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(page => {
     page.classList.remove('active');
@@ -170,7 +104,7 @@ window.addEventListener('load', () => {
   showPage(hash);
 });
 
-// --- Schedule filter ---
+
 function filterRows() {
   const query = document.getElementById("search")?.value.toLowerCase() || "";
   const rows = document.querySelectorAll("#schedule-table tbody tr");
@@ -181,7 +115,7 @@ function filterRows() {
   });
 }
 
-// --- about page data (unchanged) ---
+
 const teamMembers = [
     { name: "Frank Nkuna", position: "CEO", image: "images/image.jpg" },
     { name: "Oageng Mashaba", position: "Operations Director", image: "images/oagang.jpg" },
@@ -218,7 +152,7 @@ function initAboutPage() {
 
 document.addEventListener('DOMContentLoaded', initAboutPage);
 
-// --- route map and schedule helpers (your code) ---
+
 const trainSchedule = ["06:00", "07:30", "09:00", "10:30", "12:00", "13:30", "15:00", "16:30", "18:00", "19:30", "21:00", "23:45"];
 
 const routes = [
@@ -343,12 +277,31 @@ function init() {
     updateAll();
     updateRoute();
 
-    // Firestore: load and listen
-    loadScheduleFromFirestore();     // loads once
-    listenForScheduleChanges();      // realtime updates
+    
+    loadScheduleFromFirestore();     
+    listenForScheduleChanges();      
 
     setInterval(updateAll, 1000);
     setInterval(updateRoute, 15000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+function init() {
+  // Load initial schedule
+  loadScheduleFromFirestore();
+  // Start listening for changes
+  listenForScheduleChanges();
+
+  
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+
+
+
+
+
+
+
