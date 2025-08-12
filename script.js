@@ -387,6 +387,12 @@ function updateAll() {
 
 
 function init() {
+
+	// Load initial schedule
+    loadScheduleFromFirestore();
+  // Start listening for changes
+    listenForScheduleChanges();
+	
     initMap();
     updateAll();
     updateRoute();
@@ -396,6 +402,7 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
 
 
 
